@@ -29,8 +29,5 @@
   },
   "engines": {
     "node": ">=16.0.0"
-  },
-  "optionalDependencies": {
-    "@img/sharp-linux-x64": "^0.33.2"
   }
 }

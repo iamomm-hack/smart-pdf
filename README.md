@@ -192,10 +192,10 @@ When a PDF is uploaded:
 1. the browser sends the file to `POST /upload`
 2. Multer stores the file in the temporary upload directory
 3. the server validates:
-     - MIME type
-     - PDF magic bytes
-     - page count limit
-     - file size limit
+   - MIME type
+   - PDF magic bytes
+   - page count limit
+   - file size limit
 4. the server creates an in-memory job entry
 5. the client receives `fileId` and `pageCount`
 
@@ -217,10 +217,10 @@ When the user clicks convert:
 
 1. the browser sends `POST /convert`
 2. request payload includes:
-     - `fileId`
-     - selected `layout`
-     - `keptPages`
-     - selected `mode`
+   - `fileId`
+   - selected `layout`
+   - `keptPages`
+   - selected `mode`
 3. the server validates the layout and selected pages
 4. the server marks the job as `processing`
 5. conversion starts asynchronously in the background
@@ -303,11 +303,11 @@ Once assembly finishes:
 
 1. the server saves the generated PDF in the processed output folder
 2. the job record is updated with:
-     - output filename
-     - user-facing download filename
-     - selected pages count
-     - output sheet count
-     - layout mode
+   - output filename
+   - user-facing download filename
+   - selected pages count
+   - output sheet count
+   - layout mode
 3. the frontend shows the result screen
 4. the browser downloads the file from `GET /download/:filename`
 
@@ -345,7 +345,6 @@ Current workspace structure:
 ```text
 pdf-converter/
 ├── .gitignore
-├── .vercelignore
 ├── client/
 │   ├── favicon.svg
 │   ├── index.html
@@ -357,8 +356,7 @@ pdf-converter/
 ├── README.md
 ├── server/
 │   └── server.js
-├── uploads/
-└── vercel.json
+└── uploads/
 ```
 
 ### Runtime Folders
@@ -451,41 +449,39 @@ Responsibilities:
 - page image processing pipeline
 - OCR extraction and invisible text overlay generation
 - output PDF generation for 1-up, 2-up, 4-up, 6-up
-- safe download response naming
 - periodic cleanup of temporary files
-- Vercel-safe temp path selection and lazy dependency loading
 
 Important server functions:
 
 - `validatePdfMagic(filePath)`
-     checks PDF magic bytes
+  checks PDF magic bytes
 
 - `countPdfPages(filePath)`
-     reads page count using pdf-lib
+  reads page count using pdf-lib
 
 - `getProcessingProfile(mode)`
-     returns processing parameters for `FAST` or `STANDARD`
+  returns processing parameters for `FAST` or `STANDARD`
 
 - `processPageImage(inputPath, profile)`
-     cleans one rendered PDF page image and prepares OCR-friendly output
+  cleans one rendered PDF page image and prepares OCR-friendly output
 
 - `extractOcrWords(worker, imageBuffer)`
-     extracts OCR text and word boxes from a processed page image
+  extracts OCR text and word boxes from a processed page image
 
 - `drawOcrTextLayer(page, ocrWords, placement, sourceSize, font)`
-     overlays invisible searchable text in the output PDF
+  overlays invisible searchable text in the output PDF
 
 - `getLayoutConfig(pagesPerSheet)`
-     returns grid layout for 1, 2, 4, or 6 pages per sheet
+  returns grid layout for 1, 2, 4, or 6 pages per sheet
 
 - `buildOutputPdf(processedImages, pagesPerSheet)`
-     assembles cleaned page images and OCR text into the final PDF layout
+  assembles cleaned page images and OCR text into the final PDF layout
 
 - `convertPdf(jobId, inputPath, originalName, pagesPerSheet, keptPages, mode)`
-     full conversion orchestration pipeline
+  full conversion orchestration pipeline
 
 - `buildDownloadFileName(originalName)`
-     generates `filename_converted.pdf`
+  generates `filename_converted.pdf`
 
 ## API Architecture
 
@@ -502,11 +498,11 @@ Uploads and validates a PDF.
 
 ```json
 {
-     "fileId": "uuid",
-     "fileName": "chapter1.pdf",
-     "fileSize": 1827364,
-     "pageCount": 14,
-     "message": "Upload successful. Ready to convert."
+  "fileId": "uuid",
+  "fileName": "chapter1.pdf",
+  "fileSize": 1827364,
+  "pageCount": 14,
+  "message": "Upload successful. Ready to convert."
 }
 ```
 
@@ -518,10 +514,10 @@ Starts background conversion for a previously uploaded PDF.
 
 ```json
 {
-     "fileId": "uuid-from-upload",
-     "layout": 4,
-     "keptPages": [1, 2, 5, 7, 8],
-     "mode": "fast"
+  "fileId": "uuid-from-upload",
+  "layout": 4,
+  "keptPages": [1, 2, 5, 7, 8],
+  "mode": "fast"
 }
 ```
 
@@ -536,10 +532,10 @@ Starts background conversion for a previously uploaded PDF.
 
 ```json
 {
-     "jobId": "uuid",
-     "layout": 4,
-     "mode": "fast",
-     "message": "Conversion started."
+  "jobId": "uuid",
+  "layout": 4,
+  "mode": "fast",
+  "message": "Conversion started."
 }
 ```
 
@@ -551,12 +547,12 @@ SSE endpoint for live progress updates.
 
 ```json
 {
-     "status": "processing",
-     "page": 3,
-     "total": 8,
-     "percentage": 42,
-     "eta": 12,
-     "message": "Processing page 3 of 8"
+  "status": "processing",
+  "page": 3,
+  "total": 8,
+  "percentage": 42,
+  "eta": 12,
+  "message": "Processing page 3 of 8"
 }
 ```
 
@@ -564,14 +560,14 @@ SSE endpoint for live progress updates.
 
 ```json
 {
-     "status": "complete",
-     "outputFile": "uuid-filename_converted.pdf",
-     "downloadName": "filename_converted.pdf",
-     "originalPageCount": 10,
-     "selectedPages": 8,
-     "outputPages": 2,
-     "layout": 4,
-     "mode": "fast"
+  "status": "complete",
+  "outputFile": "uuid-filename_converted.pdf",
+  "downloadName": "filename_converted.pdf",
+  "originalPageCount": 10,
+  "selectedPages": 8,
+  "outputPages": 2,
+  "layout": 4,
+  "mode": "fast"
 }
 ```
 
@@ -684,11 +680,11 @@ Notes:
 #### Windows
 
 1. Download Poppler from:
-      `https://github.com/oschwartz10612/poppler-windows/releases`
+   `https://github.com/oschwartz10612/poppler-windows/releases`
 2. Extract it, for example to:
-      `C:\poppler`
+   `C:\poppler`
 3. Add this to your PATH:
-      `C:\poppler\Library\bin`
+   `C:\poppler\Library\bin`
 
 #### macOS
 
@@ -724,11 +720,8 @@ http://localhost:3000
 
 ## Deployment Notes
 
-The repository includes `vercel.json` and `.vercelignore`, and the server exports the Express app in a serverless-friendly way.
-
 Important caveat:
 
-- Vercel is not an ideal production target for this app because `pdf-poppler` depends on native Poppler binaries that are typically unavailable in serverless runtimes
 - the app can fail gracefully when Poppler or OCR dependencies are missing, but conversion itself still requires those binaries to exist
 - for reliable production deployment, use a host that supports native binaries and persistent temp storage, such as Render, Railway, or a VM/container platform
 
@@ -742,20 +735,19 @@ Important caveat:
 - page thumbnails are not rendered yet in the editor; page selection is number-based
 - job state is stored in memory, so restarting the server clears active jobs
 - very large PDFs may take time because each page is rendered, cleaned, OCR-processed, and rebuilt as an image-based PDF
-- Vercel deployment is limited by Poppler binary availability
 
 ## Troubleshooting
 
-| Problem | Cause | Fix |
-|---|---|---|
-| Upload rejected | Not a valid PDF | Check file type and magic bytes |
-| Conversion fails immediately | Poppler not installed or not in PATH | Install Poppler and restart terminal/server |
-| Conversion returns OCR dependency error | OCR runtime failed to initialize | Restart the server and verify dependency install completed successfully |
-| Conversion is slow | High-resolution rendering, cleanup, and OCR are all active | Use `FAST` mode for quicker output |
-| Repeated DPI warnings in terminal | OCR inferred bad image DPI metadata | Update to the latest server code and restart the server |
-| Blank or weak output | Source page may already be very light | Try a darker-background source PDF to validate behavior |
-| No download file | Temp file may already be cleaned up | Re-run conversion and download immediately |
-| Wrong page count after editing | Some pages were removed intentionally | Check the page editor summary before converting |
+| Problem                                 | Cause                                                      | Fix                                                                     |
+| --------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Upload rejected                         | Not a valid PDF                                            | Check file type and magic bytes                                         |
+| Conversion fails immediately            | Poppler not installed or not in PATH                       | Install Poppler and restart terminal/server                             |
+| Conversion returns OCR dependency error | OCR runtime failed to initialize                           | Restart the server and verify dependency install completed successfully |
+| Conversion is slow                      | High-resolution rendering, cleanup, and OCR are all active | Use `FAST` mode for quicker output                                      |
+| Repeated DPI warnings in terminal       | OCR inferred bad image DPI metadata                        | Update to the latest server code and restart the server                 |
+| Blank or weak output                    | Source page may already be very light                      | Try a darker-background source PDF to validate behavior                 |
+| No download file                        | Temp file may already be cleaned up                        | Re-run conversion and download immediately                              |
+| Wrong page count after editing          | Some pages were removed intentionally                      | Check the page editor summary before converting                         |
 
 ## Future Improvements
 
