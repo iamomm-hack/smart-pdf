@@ -6,34 +6,11 @@ const { v4: uuidv4 } = require("uuid");
 const sharp = require("sharp");
 const { PDFDocument, rgb } = require("pdf-lib");
 const rateLimit = require("express-rate-limit");
+const poppler = require("pdf-poppler");
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 const { createCanvas } = require("canvas");
 
-// Configure pdfjs-dist for Node wrapper
-pdfjsLib.GlobalWorkerOptions.workerSrc = require("pdfjs-dist/legacy/build/pdf.worker.entry.js");
-
-class NodeCanvasFactory {
-  create(width, height) {
-    const canvas = createCanvas(width, height);
-    const context = canvas.getContext("2d");
-    return {
-      canvas,
-      context,
-    };
-  }
-
-  reset(canvasAndContext, width, height) {
-    canvasAndContext.canvas.width = width;
-    canvasAndContext.canvas.height = height;
-  }
-
-  destroy(canvasAndContext) {
-    canvasAndContext.canvas.width = 0;
-    canvasAndContext.canvas.height = 0;
-    canvasAndContext.canvas = null;
-    canvasAndContext.context = null;
-  }
-}
+// We no longer configure pdfjs-dist for rendering since we are moving to poppler
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -430,32 +407,35 @@ async function convertPdf(
         message: `Extracting and cleaning page ${i + 1} of ${selectedPageIndices.length} (${profile.mode})`,
       });
 
-      const page = await pdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: profile.scale });
-
-      const canvasFactory = new NodeCanvasFactory();
-      const canvasAndContext = canvasFactory.create(
-        viewport.width,
-        viewport.height,
-      );
-
-      const renderContext = {
-        canvasContext: canvasAndContext.context,
-        viewport: viewport,
-        canvasFactory: canvasFactory,
+      // Use poppler to extract the page to an image
+      const popplerOpts = {
+        format: "png",
+        out_dir: jobImageDir,
+        out_prefix: `extract_page_${pageNum}`,
+        page: pageNum,
+        scale: profile.scale * 1024, // High res extraction
       };
 
-      await page.render(renderContext).promise;
-      const rawImageBuffer = canvasAndContext.canvas.toBuffer("image/png");
-      const tempImagePath = path.join(jobImageDir, `page_${pageNum}.png`);
-      fs.writeFileSync(tempImagePath, rawImageBuffer);
+      await poppler.convert(inputPath, popplerOpts);
 
-      const processedPage = await processPageImage(tempImagePath, profile);
+      // Poppler outputs with a "-[pageNum]" suffix, padding might vary
+      // Finding the exact generated file inside jobImageDir
+      const files = fs.readdirSync(jobImageDir);
+      const tempImagePath = files.find(
+        (f) => f.startsWith(`extract_page_${pageNum}`) && f.endsWith(".png"),
+      );
+
+      if (!tempImagePath) {
+        throw new Error(`Failed to extract page ${pageNum}`);
+      }
+
+      const fullTempPath = path.join(jobImageDir, tempImagePath);
+      const processedPage = await processPageImage(fullTempPath, profile);
       processedImages.push(processedPage);
 
       // Cleanup temp image immediately
       try {
-        fs.unlinkSync(tempImagePath);
+        fs.unlinkSync(fullTempPath);
       } catch {
         /* ignore */
       }
