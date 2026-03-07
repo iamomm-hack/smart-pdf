@@ -4,25 +4,13 @@ const path = require("path");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 const sharp = require("sharp");
-const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const { PDFDocument, rgb } = require("pdf-lib");
 const rateLimit = require("express-rate-limit");
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+const { createCanvas } = require("canvas");
 
-let poppler = null;
-let popplerLoadError = null;
-let createWorker = null;
-let ocrLoadError = null;
-
-try {
-  poppler = require("pdf-poppler");
-} catch (error) {
-  popplerLoadError = error;
-}
-
-try {
-  ({ createWorker } = require("tesseract.js"));
-} catch (error) {
-  ocrLoadError = error;
-}
+// Configure pdfjs-dist for Node wrapper
+pdfjsLib.GlobalWorkerOptions.workerSrc = require("pdfjs-dist/legacy/build/pdf.worker.entry.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -115,40 +103,11 @@ function buildDownloadFileName(originalName) {
   return `${baseName}_converted.pdf`;
 }
 
-function ensurePopplerAvailable() {
-  if (poppler) {
-    return poppler;
-  }
-
-  const details = popplerLoadError?.message
-    ? ` ${popplerLoadError.message}`
-    : "";
-  const platformHint = IS_VERCEL
-    ? " This deployment is running on Vercel, where Poppler binaries are commonly unavailable for serverless functions."
-    : "";
-
-  throw new Error(
-    `PDF conversion engine is unavailable because pdf-poppler could not be loaded.${platformHint}${details}`.trim(),
-  );
-}
-
-function ensureOcrAvailable() {
-  if (createWorker) {
-    return createWorker;
-  }
-
-  const details = ocrLoadError?.message ? ` ${ocrLoadError.message}` : "";
-  throw new Error(
-    `OCR engine is unavailable because tesseract.js could not be loaded.${details}`.trim(),
-  );
-}
-
 function getProcessingProfile(mode) {
   if (mode === "fast") {
     return {
       mode: "fast",
-      popplerScale: 1400,
-      ocrDpi: 150,
+      scale: 1.5,
       sharpenSigma: 0.6,
       pngCompressionLevel: 9,
     };
@@ -156,8 +115,7 @@ function getProcessingProfile(mode) {
 
   return {
     mode: "standard",
-    popplerScale: 2400,
-    ocrDpi: 300,
+    scale: 2.5,
     sharpenSigma: 1.0,
     pngCompressionLevel: 6,
   };
@@ -267,7 +225,6 @@ async function processPageImage(inputPath, profile) {
   const processedBuffer = await sharp(outputBuf, {
     raw: { width, height, channels: 1 },
   })
-    .withMetadata({ density: profile.ocrDpi })
     .sharpen({ sigma: profile.sharpenSigma })
     .png({ compressionLevel: profile.pngCompressionLevel })
     .toBuffer();
@@ -277,52 +234,6 @@ async function processPageImage(inputPath, profile) {
     width,
     height,
   };
-}
-
-async function extractOcrWords(worker, imageBuffer) {
-  const result = await worker.recognize(imageBuffer);
-  const words = result?.data?.words || [];
-
-  return words
-    .map((word) => ({
-      text: String(word.text || "")
-        .replace(/\s+/g, " ")
-        .trim(),
-      bbox: word.bbox,
-    }))
-    .filter((word) => word.text && word.bbox);
-}
-
-function drawOcrTextLayer(page, ocrWords, placement, sourceSize, font) {
-  if (!ocrWords || ocrWords.length === 0) {
-    return;
-  }
-
-  const scaleX = placement.width / sourceSize.width;
-  const scaleY = placement.height / sourceSize.height;
-
-  for (const word of ocrWords) {
-    const { text, bbox } = word;
-    const bboxWidth = Math.max((bbox.x1 - bbox.x0) * scaleX, 1);
-    const bboxHeight = Math.max((bbox.y1 - bbox.y0) * scaleY, 1);
-    const x = placement.x + bbox.x0 * scaleX;
-    const y = placement.y + (sourceSize.height - bbox.y1) * scaleY;
-
-    let fontSize = Math.max(bboxHeight * 0.9, 1);
-    const textWidth = font.widthOfTextAtSize(text, fontSize);
-    if (textWidth > bboxWidth && textWidth > 0) {
-      fontSize *= bboxWidth / textWidth;
-    }
-
-    page.drawText(text, {
-      x,
-      y,
-      size: Math.max(fontSize, 1),
-      font,
-      color: rgb(0, 0, 0),
-      opacity: 0.001,
-    });
-  }
 }
 
 function getLayoutConfig(pagesPerSheet) {
@@ -344,7 +255,6 @@ function getLayoutConfig(pagesPerSheet) {
 async function buildOutputPdf(processedImages, pagesPerSheet) {
   const pdfDoc = await PDFDocument.create();
   const embeddedImages = [];
-  const ocrFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   for (const processedPage of processedImages) {
     embeddedImages.push({
@@ -363,7 +273,7 @@ async function buildOutputPdf(processedImages, pagesPerSheet) {
 
   if (pagesPerSheet === 1) {
     for (const pageData of embeddedImages) {
-      const { embeddedImage, width, height, ocrWords } = pageData;
+      const { embeddedImage } = pageData;
       const page = pdfDoc.addPage([embeddedImage.width, embeddedImage.height]);
       page.drawImage(embeddedImage, {
         x: 0,
@@ -371,18 +281,6 @@ async function buildOutputPdf(processedImages, pagesPerSheet) {
         width: embeddedImage.width,
         height: embeddedImage.height,
       });
-      drawOcrTextLayer(
-        page,
-        ocrWords,
-        {
-          x: 0,
-          y: 0,
-          width: embeddedImage.width,
-          height: embeddedImage.height,
-        },
-        { width, height },
-        ocrFont,
-      );
     }
 
     return {
@@ -415,7 +313,7 @@ async function buildOutputPdf(processedImages, pagesPerSheet) {
         break;
       }
 
-      const { embeddedImage, width, height, ocrWords } = pageData;
+      const { embeddedImage } = pageData;
 
       const column = slot % columns;
       const row = Math.floor(slot / columns);
@@ -436,19 +334,6 @@ async function buildOutputPdf(processedImages, pagesPerSheet) {
         width: drawWidth,
         height: drawHeight,
       });
-
-      drawOcrTextLayer(
-        page,
-        ocrWords,
-        {
-          x,
-          y,
-          width: drawWidth,
-          height: drawHeight,
-        },
-        { width, height },
-        ocrFont,
-      );
     }
   }
 
@@ -471,19 +356,10 @@ async function convertPdf(
   const jobImageDir = path.join(DIRS.images, jobId);
   fs.mkdirSync(jobImageDir, { recursive: true });
   const profile = getProcessingProfile(mode);
-  let ocrWorker = null;
-
   try {
-    // Count pages
-    const totalPages = await countPdfPages(inputPath);
-
-    if (totalPages > 200) {
-      emitProgress(jobId, {
-        status: "error",
-        message: "PDF exceeds 200 page limit.",
-      });
-      return;
-    }
+    const data = new Uint8Array(fs.readFileSync(inputPath));
+    const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+    const totalPages = pdfDoc.numPages;
 
     job.totalPages = totalPages;
     job.originalSize = fs.statSync(inputPath).size;
@@ -494,51 +370,15 @@ async function convertPdf(
       percentage: 0,
     });
 
-    // Convert PDF to images using pdf-poppler (300 DPI)
-    emitProgress(jobId, {
-      status: "extracting",
-      message: "Extracting pages from PDF...",
-      page: 0,
-      total: totalPages,
-      percentage: 2,
-    });
+    // Gather extracted page indices
+    const allPageIndices = Array.from({ length: totalPages }, (_, i) => i + 1);
 
-    const popplerOpts = {
-      format: "png",
-      out_dir: jobImageDir,
-      out_prefix: "page",
-      scale: profile.popplerScale,
-    };
-
-    const popplerClient = ensurePopplerAvailable();
-    await popplerClient.convert(inputPath, popplerOpts);
-
-    // Gather extracted page images and sort them
-    const pageFiles = fs
-      .readdirSync(jobImageDir)
-      .filter((f) => f.startsWith("page") && f.endsWith(".png"))
-      .sort((a, b) => {
-        const numA = parseInt(a.match(/(\d+)/)?.[1] || "0", 10);
-        const numB = parseInt(b.match(/(\d+)/)?.[1] || "0", 10);
-        return numA - numB;
-      });
-
-    if (pageFiles.length === 0) {
-      emitProgress(jobId, {
-        status: "error",
-        message: "Failed to extract pages from PDF.",
-      });
-      return;
-    }
-
-    const selectedPageFiles =
+    const selectedPageIndices =
       Array.isArray(keptPages) && keptPages.length > 0
-        ? keptPages
-            .map((pageNumber) => pageFiles[pageNumber - 1])
-            .filter(Boolean)
-        : pageFiles;
+        ? keptPages.filter((p) => allPageIndices.includes(p))
+        : allPageIndices;
 
-    if (selectedPageFiles.length === 0) {
+    if (selectedPageIndices.length === 0) {
       emitProgress(jobId, {
         status: "error",
         message: "No pages selected for conversion.",
@@ -549,39 +389,46 @@ async function convertPdf(
     // Process each page through the image pipeline
     const processedImages = [];
     const startTime = Date.now();
-    const createOcrWorker = ensureOcrAvailable();
-    ocrWorker = await createOcrWorker("eng");
-    await ocrWorker.setParameters({
-      user_defined_dpi: String(profile.ocrDpi),
-    });
 
-    for (let i = 0; i < selectedPageFiles.length; i++) {
-      const pageFilePath = path.join(jobImageDir, selectedPageFiles[i]);
+    for (let i = 0; i < selectedPageIndices.length; i++) {
+      const pageNum = selectedPageIndices[i];
       const elapsed = Date.now() - startTime;
       const avgPerPage = i > 0 ? elapsed / i : 0;
       const remaining = Math.round(
-        (avgPerPage * (selectedPageFiles.length - i)) / 1000,
+        (avgPerPage * (selectedPageIndices.length - i)) / 1000,
       );
 
       emitProgress(jobId, {
-        status: "processing",
+        status: "extracting",
         page: i + 1,
-        total: selectedPageFiles.length,
-        percentage: Math.round(((i + 1) / selectedPageFiles.length) * 90) + 5,
+        total: selectedPageIndices.length,
+        percentage: Math.round(((i + 1) / selectedPageIndices.length) * 90) + 5,
         eta: remaining,
-        message: `Processing and OCR page ${i + 1} of ${selectedPageFiles.length} (${profile.mode})`,
+        message: `Extracting and cleaning page ${i + 1} of ${selectedPageIndices.length} (${profile.mode})`,
       });
 
-      const processedPage = await processPageImage(pageFilePath, profile);
-      processedPage.ocrWords = await extractOcrWords(
-        ocrWorker,
-        processedPage.imageBuffer,
-      );
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: profile.scale });
+
+      const canvas = createCanvas(viewport.width, viewport.height);
+      const ctx = canvas.getContext("2d");
+
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport,
+      };
+
+      await page.render(renderContext).promise;
+      const rawImageBuffer = canvas.toBuffer("image/png");
+      const tempImagePath = path.join(jobImageDir, `page_${pageNum}.png`);
+      fs.writeFileSync(tempImagePath, rawImageBuffer);
+
+      const processedPage = await processPageImage(tempImagePath, profile);
       processedImages.push(processedPage);
 
-      // Cleanup source page image immediately
+      // Cleanup temp image immediately
       try {
-        fs.unlinkSync(pageFilePath);
+        fs.unlinkSync(tempImagePath);
       } catch {
         /* ignore */
       }
@@ -619,9 +466,8 @@ async function convertPdf(
       downloadName,
       originalSize: job.originalSize,
       processedSize,
-      totalPages: selectedPageFiles.length,
-      originalPageCount: pageFiles.length,
-      selectedPages: selectedPageFiles.length,
+      originalPageCount: totalPages,
+      selectedPages: selectedPageIndices.length,
       outputPages,
       layout: pagesPerSheet,
       mode: profile.mode,
@@ -635,13 +481,6 @@ async function convertPdf(
       message: err.message || "An unexpected error occurred during processing.",
     });
   } finally {
-    if (ocrWorker) {
-      try {
-        await ocrWorker.terminate();
-      } catch {
-        /* ignore */
-      }
-    }
     // Cleanup source PDF and temp image directory
     try {
       fs.unlinkSync(inputPath);
@@ -727,19 +566,6 @@ app.post("/convert", convertLimiter, (req, res) => {
     return res.status(400).json({ error: "Invalid or expired file ID." });
   }
 
-  if (!poppler) {
-    return res.status(503).json({
-      error: "PDF conversion is currently unavailable because the conversion engine could not start.",
-    });
-  }
-
-  if (!createWorker) {
-    return res.status(503).json({
-      error:
-        "PDF conversion is currently unavailable because the OCR engine could not start.",
-    });
-  }
-
   const pagesPerSheet = Number(layout || 1);
   if (![1, 2, 4, 6].includes(pagesPerSheet)) {
     return res
@@ -751,11 +577,9 @@ app.post("/convert", convertLimiter, (req, res) => {
 
   const job = jobs.get(fileId);
   if (job.status !== "uploaded") {
-    return res
-      .status(400)
-      .json({
-        error: "This file is already being processed or has been processed.",
-      });
+    return res.status(400).json({
+      error: "This file is already being processed or has been processed.",
+    });
   }
 
   const normalizedKeptPages = Array.isArray(keptPages)
