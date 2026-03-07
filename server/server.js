@@ -12,6 +12,29 @@ const { createCanvas } = require("canvas");
 // Configure pdfjs-dist for Node wrapper
 pdfjsLib.GlobalWorkerOptions.workerSrc = require("pdfjs-dist/legacy/build/pdf.worker.entry.js");
 
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = createCanvas(width, height);
+    const context = canvas.getContext("2d");
+    return {
+      canvas,
+      context,
+    };
+  }
+
+  reset(canvasAndContext, width, height) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TEMP_ROOT = path.join(__dirname, "..");
@@ -410,21 +433,20 @@ async function convertPdf(
       const page = await pdfDoc.getPage(pageNum);
       const viewport = page.getViewport({ scale: profile.scale });
 
-      const canvas = createCanvas(viewport.width, viewport.height);
-      const ctx = canvas.getContext("2d");
+      const canvasFactory = new NodeCanvasFactory();
+      const canvasAndContext = canvasFactory.create(
+        viewport.width,
+        viewport.height,
+      );
 
-      // pdf.js in Node needs a little help recognizing the canvas object
-      // explicitly passing canvas as `canvasContext.canvas` or via `canvasFactory`
       const renderContext = {
-        canvasContext: ctx,
+        canvasContext: canvasAndContext.context,
         viewport: viewport,
+        canvasFactory: canvasFactory,
       };
 
-      // In some pdfjs + canvas versions, we must attach the canvas to the context manually
-      renderContext.canvasContext.canvas = canvas;
-
       await page.render(renderContext).promise;
-      const rawImageBuffer = canvas.toBuffer("image/png");
+      const rawImageBuffer = canvasAndContext.canvas.toBuffer("image/png");
       const tempImagePath = path.join(jobImageDir, `page_${pageNum}.png`);
       fs.writeFileSync(tempImagePath, rawImageBuffer);
 
