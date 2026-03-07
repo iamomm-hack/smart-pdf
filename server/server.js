@@ -3,7 +3,13 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const sharp = require('sharp');
+const os = require('os');
+let sharp = null;
+try {
+  sharp = require('sharp');
+} catch (e) {
+  console.warn('[Startup] Failed to load sharp:', e.message);
+}
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const rateLimit = require('express-rate-limit');
 
@@ -26,8 +32,8 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const IS_VERCEL = Boolean(process.env.VERCEL);
-const TEMP_ROOT = IS_VERCEL ? path.join('/tmp', 'smart-pdf') : path.join(__dirname, '..');
+const isServerless = Boolean(process.env.VERCEL || process.env.NOW_REGION || process.env.AWS_REGION || process.env.AWS_LAMBDA_FUNCTION_VERSION);
+const TEMP_ROOT = isServerless ? path.join(os.tmpdir(), 'smart-pdf') : path.join(__dirname, '..');
 
 // ─── Directory Setup ───────────────────────────────────────────────
 const DIRS = {
@@ -37,8 +43,12 @@ const DIRS = {
   client: path.join(__dirname, '..', 'client'),
 };
 
-for (const dir of [DIRS.uploads, DIRS.processed, DIRS.images]) {
-  fs.mkdirSync(dir, { recursive: true });
+try {
+  for (const dir of [DIRS.uploads, DIRS.processed, DIRS.images]) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+} catch (e) {
+  console.warn('[Startup] Failed to create temporary directories. Ignore if on Vercel.', e.message);
 }
 
 // ─── In-memory job tracking ────────────────────────────────────────
@@ -642,6 +652,12 @@ app.post('/convert', convertLimiter, (req, res) => {
   if (!createWorker) {
     return res.status(503).json({
       error: 'PDF conversion is currently unavailable because the OCR engine could not start.',
+    });
+  }
+
+  if (!sharp) {
+    return res.status(503).json({
+      error: 'PDF conversion is currently unavailable because the Sharp image processing engine could not start. Please ensure `@img/sharp-linux-x64` is installed for Vercel.',
     });
   }
 
