@@ -1,0 +1,11 @@
+version: "1"
+services:
+  - type: web
+    name: pdf-background-converter
+    env: node
+    plan: free
+    dockerCommand: "npm start"
+    envVars:
+      - key: PORT
+        value: 3000
+    autoDeploy: true

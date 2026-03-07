@@ -718,12 +718,31 @@ Open:
 http://localhost:3000
 ```
 
-## Deployment Notes
+## Deployment
 
-Important caveat:
+> [!IMPORTANT]
+> This application **cannot** be deployed to serverless providers like Vercel or Netlify. It requires:
+>
+> 1. Persistent background execution (for PDF parsing and OCR)
+> 2. System-level binary dependencies (`poppler-utils`, native `canvas`)
+> 3. Writeable temporary filesystem for image extraction
 
-- the app can fail gracefully when Poppler or OCR dependencies are missing, but conversion itself still requires those binaries to exist
-- for reliable production deployment, use a host that supports native binaries and persistent temp storage, such as Render, Railway, or a VM/container platform
+### Direct Free Deployment via Render.com
+
+This repository is pre-configured for a 1-click deployment to [Render's Free Tier](https://render.com/). It uses a custom `Dockerfile` to automatically install Node.js alongside all required Linux graphic libraries.
+
+**Steps to Deploy:**
+
+1. Push this repository to your GitHub account.
+2. Log in to [Render.com](https://render.com/) with GitHub.
+3. Click **New +** and select **Web Service**.
+4. Choose **Build and deploy from a Git repository** and select your repo.
+5. In the configuration:
+   - **Environment:** Render should auto-detect `Docker`. (If not, select Docker).
+   - **Instance Type:** Free.
+6. Click **Create Web Service**.
+
+> _Note: Initial deployment takes 3-5 minutes because Docker is building system-level dependencies for Poppler and Tesseract. Render free instances will sleep after 15 minutes of inactivity; waking up takes ~30 seconds._
 
 ## package.json Scripts
 
