@@ -391,53 +391,91 @@ async function convertPdf(
     const processedImages = [];
     const startTime = Date.now();
 
-    for (let i = 0; i < selectedPageIndices.length; i++) {
-      const pageNum = selectedPageIndices[i];
-      const elapsed = Date.now() - startTime;
-      const avgPerPage = i > 0 ? elapsed / i : 0;
-      const remaining = Math.round(
-        (avgPerPage * (selectedPageIndices.length - i)) / 1000,
-      );
+    emitProgress(jobId, {
+      status: "extracting",
+      page: 0,
+      total: selectedPageIndices.length,
+      percentage: 10,
+      message: `Extracting all pages from PDF... (${profile.mode})`,
+    });
 
-      emitProgress(jobId, {
-        status: "extracting",
-        page: i + 1,
-        total: selectedPageIndices.length,
-        percentage: Math.round(((i + 1) / selectedPageIndices.length) * 90) + 5,
-        eta: remaining,
-        message: `Extracting and cleaning page ${i + 1} of ${selectedPageIndices.length} (${profile.mode})`,
+    // 1. Extract ALL pages at once using a single pdftoppm command
+    // This is vastly faster than running pdftoppm per page because it parses the PDF once
+    const outPrefix = `extract`;
+    const outPrefixPath = path.join(jobImageDir, outPrefix);
+    const dpi = Math.round(profile.scale * 150); // Convert scale to DPI
+
+    // Command extracts all pages to PNGs in the jobImageDir
+    const cmd = `pdftoppm -r ${dpi} -png "${inputPath}" "${outPrefixPath}"`;
+    await execPromise(cmd);
+
+    // Get all generated files and sort them to ensure correct order
+    // pdftoppm usually pads with zeros, e.g., extract-1.png, extract-02.png
+    const files = fs
+      .readdirSync(jobImageDir)
+      .filter((f) => f.startsWith(outPrefix) && f.endsWith(".png"))
+      .sort((a, b) => {
+        const numA = parseInt(a.match(/\d+/)[0], 10);
+        const numB = parseInt(b.match(/\d+/)[0], 10);
+        return numA - numB;
       });
 
-      // Use native pdftoppm to extract the page to an image
-      const outPrefix = `extract_page_${pageNum}`;
-      const outPrefixPath = path.join(jobImageDir, outPrefix);
-      const dpi = Math.round(profile.scale * 150); // Convert scale to DPI
+    // 2. Process the images concurrently in batches
+    const BATCH_SIZE = 4;
+    let completedPages = 0;
 
-      const cmd = `pdftoppm -f ${pageNum} -l ${pageNum} -r ${dpi} -png "${inputPath}" "${outPrefixPath}"`;
-      await execPromise(cmd);
+    for (let i = 0; i < selectedPageIndices.length; i += BATCH_SIZE) {
+      const batchIndices = selectedPageIndices.slice(i, i + BATCH_SIZE);
 
-      // Poppler pdftoppm outputs with a "-[pageNum]" suffix, padding might vary (e.g., -01, -1)
-      // Finding the exact generated file inside jobImageDir
-      const files = fs.readdirSync(jobImageDir);
-      const tempImagePath = files.find(
-        (f) => f.startsWith(outPrefix) && f.endsWith(".png"),
-      );
+      const batchPromises = batchIndices.map(async (pageNum) => {
+        // Find the extracted image for this page (pageNum is 1-indexed, files array is 0-indexed)
+        const tempImagePath = files[pageNum - 1];
+        if (!tempImagePath) {
+          throw new Error(`Failed to find extracted image for page ${pageNum}`);
+        }
 
-      if (!tempImagePath) {
-        throw new Error(`Failed to extract page ${pageNum}`);
-      }
+        const fullTempPath = path.join(jobImageDir, tempImagePath);
+        const processedPage = await processPageImage(fullTempPath, profile);
 
-      const fullTempPath = path.join(jobImageDir, tempImagePath);
-      const processedPage = await processPageImage(fullTempPath, profile);
-      processedImages.push(processedPage);
+        try {
+          fs.unlinkSync(fullTempPath);
+        } catch {
+          /* ignore */
+        }
 
-      // Cleanup temp image immediately
-      try {
-        fs.unlinkSync(fullTempPath);
-      } catch {
-        /* ignore */
-      }
+        completedPages++;
+
+        const elapsed = Date.now() - startTime;
+        const avgPerPage = elapsed / completedPages;
+        const remaining = Math.round(
+          (avgPerPage * (selectedPageIndices.length - completedPages)) / 1000,
+        );
+
+        emitProgress(jobId, {
+          status: "processing",
+          page: completedPages,
+          total: selectedPageIndices.length,
+          percentage:
+            Math.round((completedPages / selectedPageIndices.length) * 85) + 10,
+          eta: Math.max(0, remaining),
+          message: `Cleaning page ${completedPages} of ${selectedPageIndices.length}`,
+        });
+
+        return {
+          pageNum,
+          processedPage,
+        };
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      processedImages.push(...batchResults);
     }
+
+    // Sort the processed images back to their original page order
+    processedImages.sort((a, b) => a.pageNum - b.pageNum);
+    const orderedProcessedPages = processedImages.map(
+      (item) => item.processedPage,
+    );
 
     // Reassemble into PDF
     emitProgress(jobId, {
@@ -447,7 +485,7 @@ async function convertPdf(
     });
 
     const { pdfBytes, outputPages } = await buildOutputPdf(
-      processedImages,
+      orderedProcessedPages,
       pagesPerSheet,
     );
     const downloadName = buildDownloadFileName(originalName);
