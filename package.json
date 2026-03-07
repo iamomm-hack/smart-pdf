@@ -1,0 +1,28 @@
+{
+  "name": "pdf-background-converter",
+  "version": "1.0.0",
+  "description": "Intelligently converts dark-background PDFs into clean, white-background PDFs optimized for printing",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "npx nodemon server/server.js"
+  },
+  "keywords": ["pdf", "converter", "background-removal", "printing"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-poppler": "^0.2.1",
+    "sharp": "^0.33.2",
+    "pdf-lib": "^1.17.1",
+    "tesseract.js": "^5.1.1",
+    "uuid": "^9.0.0",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

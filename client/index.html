@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Converter</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Corner accents -->
+  <div class="corner corner--tl" aria-hidden="true"></div>
+  <div class="corner corner--tr" aria-hidden="true"></div>
+  <div class="corner corner--bl" aria-hidden="true"></div>
+  <div class="corner corner--br" aria-hidden="true"></div>
+
+  <!-- ─── Header ──────────────────────────────────── -->
+  <header class="header">
+    <h1 class="header__title">[ <span class="header__accent">SMART PDF</span> ]</h1>
+    <p class="header__sub">DARK &rarr; WHITE BACKGROUND TRANSFORMATION</p>
+  </header>
+
+  <main class="main" role="main">
+
+    <!-- ─── Upload Section ─────────────────────────── -->
+    <section id="section-upload" class="section section--active" aria-label="Upload PDF">
+      <div class="section__header">
+        <span class="section__num">01</span>
+        <h2 class="section__title">UPLOAD DOCUMENT</h2>
+        <span class="section__line"></span>
+      </div>
+
+      <div
+        id="drop-zone"
+        class="drop-zone"
+        role="button"
+        tabindex="0"
+        aria-label="Drag and drop a PDF file here, or click to browse"
+      >
+        <div class="drop-zone__content">
+          <div class="drop-zone__icon" aria-hidden="true">
+            <!-- Document icon matching screenshot -->
+            <svg width="48" height="56" viewBox="0 0 48 56" fill="none">
+              <rect x="1" y="1" width="46" height="54" rx="3" stroke="var(--clr-accent)" stroke-width="1.5"/>
+              <line x1="12" y1="18" x2="36" y2="18" stroke="var(--clr-accent)" stroke-width="1.5"/>
+              <line x1="12" y1="26" x2="36" y2="26" stroke="var(--clr-accent)" stroke-width="1.5"/>
+              <line x1="12" y1="34" x2="28" y2="34" stroke="var(--clr-accent)" stroke-width="1.5"/>
+              <!-- Upload arrow -->
+              <path d="M24 40V50M20 46L24 50L28 46" stroke="var(--clr-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p class="drop-zone__text">DROP PDF FILE HERE</p>
+          <p class="drop-zone__subtext">or click to browse</p>
+          <div class="drop-zone__specs">
+            <span>MAX: 50MB</span>
+            <span class="drop-zone__sep">|</span>
+            <span>PAGES: 1-200</span>
+            <span class="drop-zone__sep">|</span>
+            <span>FORMAT: PDF</span>
+          </div>
+        </div>
+        <input
+          type="file"
+          id="file-input"
+          accept="application/pdf,.pdf"
+          hidden
+          aria-label="Select PDF file"
+        >
+      </div>
+
+      <!-- File info (shown after selection) -->
+      <div id="file-info" class="file-info" hidden>
+        <div class="file-info__grid">
+          <div class="file-info__item">
+            <span class="file-info__label">FILE</span>
+            <span class="file-info__value" id="file-name">—</span>
+          </div>
+          <div class="file-info__item">
+            <span class="file-info__label">SIZE</span>
+            <span class="file-info__value" id="file-size">—</span>
+          </div>
+          <div class="file-info__item">
+            <span class="file-info__label">PAGES</span>
+            <span class="file-info__value" id="file-pages">—</span>
+          </div>
+          <div class="file-info__item">
+            <span class="file-info__label">STATUS</span>
+            <span class="file-info__value file-info__value--ok" id="file-status">READY</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-editor" class="page-editor" hidden aria-label="PDF page editor">
+        <div class="page-editor__header">
+          <div>
+            <div class="page-editor__label">PAGE EDITOR</div>
+            <div class="page-editor__summary" id="page-editor-summary">Select pages to keep before conversion.</div>
+          </div>
+          <button id="btn-reset-pages" class="page-editor__reset" type="button">RESET PAGES</button>
+        </div>
+        <div id="page-editor-list" class="page-editor__list" role="list" aria-label="Uploaded PDF pages"></div>
+      </div>
+
+      <div id="layout-selector" class="layout-selector" aria-label="Output layout options" hidden>
+        <div class="layout-selector__label">OUTPUT LAYOUT</div>
+        <div class="layout-selector__options" role="radiogroup" aria-label="Choose PDF page layout">
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="layout-mode" value="1" checked>
+            <span class="layout-option__text">1 PAGE / SHEET</span>
+          </label>
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="layout-mode" value="2">
+            <span class="layout-option__text">2 PAGES / SHEET</span>
+          </label>
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="layout-mode" value="4">
+            <span class="layout-option__text">4 PAGES / SHEET</span>
+          </label>
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="layout-mode" value="6">
+            <span class="layout-option__text">6 PAGES / SHEET</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="processing-mode-selector" class="layout-selector" aria-label="Processing speed options" hidden>
+        <div class="layout-selector__label">PROCESSING MODE</div>
+        <div class="layout-selector__options layout-selector__options--two" role="radiogroup" aria-label="Choose processing mode">
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="processing-mode" value="fast">
+            <span class="layout-option__text">FAST</span>
+          </label>
+          <label class="layout-option">
+            <input class="layout-option__input" type="radio" name="processing-mode" value="standard" checked>
+            <span class="layout-option__text">STANDARD</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Convert button bar -->
+      <div class="convert-bar">
+        <button id="btn-convert" class="btn btn--convert" disabled aria-label="Initiate conversion">
+          <span class="btn__text">INITIATE CONVERSION &rarr;</span>
+          <span class="btn__loader" hidden aria-hidden="true"></span>
+        </button>
+        <button id="btn-clear" class="btn btn--clear" hidden aria-label="Clear file">✕</button>
+      </div>
+
+      <!-- Error display -->
+      <div id="error-bar" class="error-bar" hidden role="alert">
+        <span class="error-bar__icon" aria-hidden="true">!</span>
+        <span class="error-bar__msg" id="error-msg"></span>
+        <button class="error-bar__close" id="error-close" aria-label="Dismiss error">&times;</button>
+      </div>
+    </section>
+
+    <!-- ─── Processing Section ─────────────────────── -->
+    <section id="section-processing" class="section" hidden aria-label="Processing">
+      <div class="section__header">
+        <span class="section__num">02</span>
+        <h2 class="section__title">PROCESSING</h2>
+        <span class="section__line"></span>
+      </div>
+
+      <div class="processing">
+        <div class="processing__visual">
+          <div class="processing__ring" id="progress-ring">
+            <svg viewBox="0 0 120 120" class="processing__svg">
+              <circle cx="60" cy="60" r="54" class="processing__track"/>
+              <circle cx="60" cy="60" r="54" class="processing__fill" id="progress-circle"/>
+            </svg>
+            <div class="processing__pct" id="progress-pct">0%</div>
+          </div>
+        </div>
+
+        <div class="processing__details">
+          <div class="processing__status" id="processing-status">Initializing...</div>
+          <div class="processing__page" id="processing-page">Page 0 / 0</div>
+          <div class="processing__eta" id="processing-eta">Estimating time...</div>
+        </div>
+
+        <div class="processing__log" id="processing-log" aria-live="polite">
+          <div class="log-entry">&gt; Starting conversion pipeline...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Download Section ───────────────────────── -->
+    <section id="section-download" class="section" hidden aria-label="Download">
+      <div class="section__header">
+        <span class="section__num">03</span>
+        <h2 class="section__title">OUTPUT</h2>
+        <span class="section__line"></span>
+      </div>
+
+      <div class="download">
+        <div class="download__check" aria-hidden="true">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" fill="none" stroke="var(--clr-accent)" stroke-width="1.5"/>
+            <path class="download__check-mark" d="M24 42L34 52L56 30" fill="none" stroke="var(--clr-accent)" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <h3 class="download__heading">CONVERSION COMPLETE</h3>
+
+        <div class="download__stats">
+          <div class="download__stat">
+            <span class="download__stat-label">ORIGINAL</span>
+            <span class="download__stat-value" id="stat-original">—</span>
+          </div>
+          <div class="download__stat">
+            <span class="download__stat-label">CONVERTED</span>
+            <span class="download__stat-value" id="stat-converted">—</span>
+          </div>
+          <div class="download__stat">
+            <span class="download__stat-label">INPUT PAGES</span>
+            <span class="download__stat-value" id="stat-pages">—</span>
+          </div>
+          <div class="download__stat">
+            <span class="download__stat-label">OUTPUT SHEETS</span>
+            <span class="download__stat-value" id="stat-output-pages">—</span>
+          </div>
+          <div class="download__stat">
+            <span class="download__stat-label">LAYOUT</span>
+            <span class="download__stat-value" id="stat-layout">—</span>
+          </div>
+          <div class="download__stat">
+            <span class="download__stat-label">TIME</span>
+            <span class="download__stat-value" id="stat-time">—</span>
+          </div>
+        </div>
+
+        <div class="download__actions">
+          <a id="btn-download" class="btn btn--convert btn--dl" href="#" download aria-label="Download converted PDF">
+            DOWNLOAD PDF
+          </a>
+          <button id="btn-another" class="btn btn--ghost" aria-label="Process another PDF">
+            PROCESS ANOTHER
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="footer__left">SYSTEM STATUS: <span class="footer__ok" id="footer-status">OPERATIONAL</span></span>
+    <span class="footer__right">v1.0.0</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
