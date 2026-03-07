@@ -6,9 +6,10 @@ const { v4: uuidv4 } = require("uuid");
 const sharp = require("sharp");
 const { PDFDocument, rgb } = require("pdf-lib");
 const rateLimit = require("express-rate-limit");
-const poppler = require("pdf-poppler");
+const { exec } = require("child_process");
+const util = require("util");
+const execPromise = util.promisify(exec);
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-const { createCanvas } = require("canvas");
 
 // We no longer configure pdfjs-dist for rendering since we are moving to poppler
 
@@ -407,22 +408,19 @@ async function convertPdf(
         message: `Extracting and cleaning page ${i + 1} of ${selectedPageIndices.length} (${profile.mode})`,
       });
 
-      // Use poppler to extract the page to an image
-      const popplerOpts = {
-        format: "png",
-        out_dir: jobImageDir,
-        out_prefix: `extract_page_${pageNum}`,
-        page: pageNum,
-        scale: profile.scale * 1024, // High res extraction
-      };
+      // Use native pdftoppm to extract the page to an image
+      const outPrefix = `extract_page_${pageNum}`;
+      const outPrefixPath = path.join(jobImageDir, outPrefix);
+      const dpi = Math.round(profile.scale * 150); // Convert scale to DPI
 
-      await poppler.convert(inputPath, popplerOpts);
+      const cmd = `pdftoppm -f ${pageNum} -l ${pageNum} -r ${dpi} -png "${inputPath}" "${outPrefixPath}"`;
+      await execPromise(cmd);
 
-      // Poppler outputs with a "-[pageNum]" suffix, padding might vary
+      // Poppler pdftoppm outputs with a "-[pageNum]" suffix, padding might vary (e.g., -01, -1)
       // Finding the exact generated file inside jobImageDir
       const files = fs.readdirSync(jobImageDir);
       const tempImagePath = files.find(
-        (f) => f.startsWith(`extract_page_${pageNum}`) && f.endsWith(".png"),
+        (f) => f.startsWith(outPrefix) && f.endsWith(".png"),
       );
 
       if (!tempImagePath) {
