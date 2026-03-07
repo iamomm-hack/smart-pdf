@@ -413,10 +413,15 @@ async function convertPdf(
       const canvas = createCanvas(viewport.width, viewport.height);
       const ctx = canvas.getContext("2d");
 
+      // pdf.js in Node needs a little help recognizing the canvas object
+      // explicitly passing canvas as `canvasContext.canvas` or via `canvasFactory`
       const renderContext = {
         canvasContext: ctx,
         viewport: viewport,
       };
+
+      // In some pdfjs + canvas versions, we must attach the canvas to the context manually
+      renderContext.canvasContext.canvas = canvas;
 
       await page.render(renderContext).promise;
       const rawImageBuffer = canvas.toBuffer("image/png");
